@@ -118,78 +118,102 @@ fun MyApp(
     var openTimePickerDialog by rememberSaveable { mutableStateOf(false) }
     val timePickerState = rememberTimePickerState()
     var showSelectedTimeResult by rememberSaveable { mutableStateOf(false) }
-    var openBottomSheetDialog by rememberSaveable { mutableStateOf(false) }
+    var addUserDialog by rememberSaveable { mutableStateOf(false) }
     var bottomSheetList by rememberSaveable {
         mutableStateOf(emptyList<User>())
     }
     val scope = rememberCoroutineScope()
-    val snackBarResultToast = remember {
+    var snackBarResultToast by remember {
         mutableStateOf("")
     }
+    var showUserList by rememberSaveable {
+        mutableStateOf(false)
+    }
+    var autoCloseOnUserAdded by rememberSaveable {
+        mutableStateOf(false)
+    }
 
-    if (openAlertDialog) {
-        DisplayAlertDialog(
-            onDismiss = {
-                openAlertDialog = false
-            }
-        )
-    }
-    if (openCustomDialog) {
-        CustomDialog(
-            customDialogClosable = customDialogClosable,
-            onDismiss = {
-                openCustomDialog = false
-            },
-            onClosableChange = {
-                customDialogClosable = it
-            }
-        )
-    }
-    if (openDatePickerDialog) {
-        DisplayDatePickerDialog(
-            datePickerState = datePickerState,
-            onDateSelected = { selectedDate ->
-                openDatePickerDialog = false
-                showSelectedDateResult = true
-                Log.d("TAG", "MyApp: selectedDate -> $selectedDate")
-            },
-            onDismiss = {
-                openDatePickerDialog = false
-                Log.d("TAG", "MyApp: date picker dismissed")
-            }
-        )
-    }
-    if (openTimePickerDialog) {
-        DisplayTimePickerDialog(
-            timePickerState = timePickerState,
-            onTimeSelected = {
-                openTimePickerDialog = false
-                showSelectedTimeResult = true
-            },
-            onDismiss = {
-                openTimePickerDialog = false
-            }
-        )
-    }
-    if (openBottomSheetDialog) {
-        DisplayBottomSheet(
-            bottomSheetList = bottomSheetList,
-            onUserAdded = {
-                bottomSheetList = bottomSheetList + it
-            },
-            onUserDeleted = { deletedUser ->
-                bottomSheetList = bottomSheetList.filter {
-                    it != deletedUser
+    when {
+        openAlertDialog -> {
+            DisplayAlertDialog(
+                onDismiss = {
+                    openAlertDialog = false
                 }
-            },
-            onDismiss = {
-                openBottomSheetDialog = false
-            }
-        )
-    }
-    if (snackBarResultToast.value.isNotEmpty()) {
-        ToastMessage(message = snackBarResultToast.value)
-        snackBarResultToast.value = ""
+            )
+        }
+
+        openCustomDialog -> {
+            CustomDialog(
+                customDialogClosable = customDialogClosable,
+                onDismiss = {
+                    openCustomDialog = false
+                },
+                onClosableChange = {
+                    customDialogClosable = it
+                }
+            )
+        }
+
+        openDatePickerDialog -> {
+            DisplayDatePickerDialog(
+                datePickerState = datePickerState,
+                onDateSelected = { selectedDate ->
+                    openDatePickerDialog = false
+                    showSelectedDateResult = true
+                },
+                onDismiss = {
+                    openDatePickerDialog = false
+                }
+            )
+        }
+
+        openTimePickerDialog -> {
+            DisplayTimePickerDialog(
+                timePickerState = timePickerState,
+                onTimeSelected = {
+                    openTimePickerDialog = false
+                    showSelectedTimeResult = true
+                },
+                onDismiss = {
+                    openTimePickerDialog = false
+                }
+            )
+        }
+
+        addUserDialog -> {
+            AddUserDialog(
+                autoClose = autoCloseOnUserAdded,
+                onAutoCloseChange = {
+                    autoCloseOnUserAdded = it
+                },
+                onUserAdded = {
+                    bottomSheetList = bottomSheetList + it
+                    if (autoCloseOnUserAdded) {
+                        addUserDialog = false
+                    }
+                },
+                onDismiss = {
+                    addUserDialog = false
+                }
+            )
+        }
+
+        snackBarResultToast.isNotEmpty() -> {
+            ToastMessage(message = snackBarResultToast)
+            snackBarResultToast = ""
+        }
+
+        showUserList -> {
+            DisplayUsers(
+                userList = bottomSheetList,
+                onDelete = {
+                    bottomSheetList = bottomSheetList - it
+                },
+                onDismiss = {
+                    showUserList = false
+                }
+            )
+        }
     }
 
     Column(
@@ -282,16 +306,34 @@ fun MyApp(
                 text = "Time picker dialog"
             )
         }
-        Button(
+        Row(
             modifier = Modifier
                 .fillMaxWidth(),
-            onClick = {
-                openBottomSheetDialog = true
-            }
+            horizontalArrangement = Arrangement
+                .spacedBy(5.dp)
         ) {
-            Text(
-                text = "Bottom sheet dialog"
-            )
+            Button(
+                modifier = Modifier
+                    .weight(1f),
+                onClick = {
+                    addUserDialog = true
+                }
+            ) {
+                Text(
+                    text = "Add user"
+                )
+            }
+            Button(
+                modifier = Modifier
+                    .weight(1f),
+                onClick = {
+                    showUserList = true
+                }
+            ) {
+                Text(
+                    text = "User list"
+                )
+            }
         }
         Button(
             modifier = Modifier
@@ -305,13 +347,13 @@ fun MyApp(
                             withDismissAction = true,
                             duration = SnackbarDuration.Long
                         )
-                    when (result) {
+                    snackBarResultToast = when (result) {
                         SnackbarResult.Dismissed -> {
-                            snackBarResultToast.value = "Snackbar dismissed"
+                            "SnackBar dismissed"
                         }
 
                         SnackbarResult.ActionPerformed -> {
-                            snackBarResultToast.value = "Snackbar action performed"
+                            "SnackBar action performed"
                         }
                     }
                 }
@@ -490,13 +532,15 @@ fun DisplayTimePickerDialog(
 }
 
 @Composable
-fun DisplayBottomSheet(
-    bottomSheetList: List<User>,
+fun AddUserDialog(
+    autoClose: Boolean,
+    onAutoCloseChange: (Boolean) -> Unit,
     onUserAdded: (User) -> Unit,
-    onUserDeleted: (User) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true
+    )
     ModalBottomSheet(
         modifier = Modifier
             .fillMaxWidth(),
@@ -512,85 +556,56 @@ fun DisplayBottomSheet(
         var showErrors by rememberSaveable {
             mutableStateOf(false)
         }
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
-            contentPadding = PaddingValues(
-                horizontal = 10.dp,
-                vertical = 15.dp
-            ),
+                .padding(
+                    horizontal = 10.dp
+                ),
             verticalArrangement = Arrangement.spacedBy(15.dp)
         ) {
-            item {
-                OutlinedTextField(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    value = name,
-                    placeholder = {
-                        Text(text = "Your name")
-                    },
-                    onValueChange = {
-                        name = it
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.Next
-                    ),
-                    isError = showErrors && name.isEmpty(),
-                    singleLine = true,
-                    supportingText = {
-                        if (showErrors && name.isEmpty()) {
-                            Text(text = "Name is required")
-                        }
+            OutlinedTextField(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                value = name,
+                placeholder = {
+                    Text(text = "Your name")
+                },
+                onValueChange = {
+                    name = it
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Next
+                ),
+                isError = showErrors && name.isEmpty(),
+                singleLine = true,
+                supportingText = {
+                    if (showErrors && name.isEmpty()) {
+                        Text(text = "Name is required")
                     }
-                )
-            }
-            item {
-                val keyboardController = LocalSoftwareKeyboardController.current
-                OutlinedTextField(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    value = phoneNumber,
-                    placeholder = {
-                        Text(
-                            text = "Your phone number"
-                        )
-                    },
-                    onValueChange = {
-                        phoneNumber = it
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            keyboardController?.hide()
-                            if (name.isNotEmpty() && phoneNumber.isNotEmpty()) {
-                                onUserAdded(User(name, phoneNumber))
-                                name = ""
-                                phoneNumber = ""
-                                showErrors = false
-                            } else {
-                                showErrors = true
-                            }
-                        }
-                    ),
-                    isError = showErrors && phoneNumber.isEmpty(),
-                    singleLine = true,
-                    supportingText = {
-                        if (showErrors && phoneNumber.isEmpty()) {
-                            Text(text = "Phone number is required")
-                        }
-                    }
-                )
-            }
-            item {
-                Button(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    onClick = {
+                }
+            )
+            val keyboardController = LocalSoftwareKeyboardController.current
+            OutlinedTextField(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                value = phoneNumber,
+                placeholder = {
+                    Text(
+                        text = "Your phone number"
+                    )
+                },
+                onValueChange = {
+                    phoneNumber = it
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        keyboardController?.hide()
                         if (name.isNotEmpty() && phoneNumber.isNotEmpty()) {
                             onUserAdded(User(name, phoneNumber))
                             name = ""
@@ -600,19 +615,72 @@ fun DisplayBottomSheet(
                             showErrors = true
                         }
                     }
-                ) {
-                    Text(
-                        text = "Add user"
-                    )
+                ),
+                isError = showErrors && phoneNumber.isEmpty(),
+                singleLine = true,
+                supportingText = {
+                    if (showErrors && phoneNumber.isEmpty()) {
+                        Text(text = "Phone number is required")
+                    }
                 }
+            )
+            Button(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                onClick = {
+                    if (name.isNotEmpty() && phoneNumber.isNotEmpty()) {
+                        onUserAdded(User(name, phoneNumber))
+                        name = ""
+                        phoneNumber = ""
+                        showErrors = false
+                    } else {
+                        showErrors = true
+                    }
+                }
+            ) {
+                Text(
+                    text = "Add user"
+                )
             }
-            items(
-                items = bottomSheetList,
-            ) { user ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = autoClose,
+                    onCheckedChange = {
+                        onAutoCloseChange(it)
+                    }
+                )
+                Text(text = "Close dialog on user added")
+            }
+        }
+    }
+}
+
+@Composable
+fun DisplayUsers(
+    userList: List<User>,
+    onDelete: (User) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(
+        modifier = Modifier
+            .fillMaxWidth(),
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(items = userList) { user ->
                 UserItem(
                     user = user,
                     onDelete = {
-                        onUserDeleted(user)
+                        onDelete(user)
                     }
                 )
             }
